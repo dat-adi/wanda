@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Set common variables
-model="decapoda-research/llama-7b-hf"
+model="baffo32/decapoda-research-llama-7B-hf"
 sparsity_ratio=0.5
 cuda_device=0
 
