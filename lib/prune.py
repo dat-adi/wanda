@@ -252,7 +252,7 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
 
     # Store sparsity data in DuckDB
     if sparsity_data:
-        conn = duckdb.connect()
+        conn = duckdb.connect("./sparsity.db")
 
         for mat_type, data_list in sparsity_data.items():
             if data_list:  # Only process if we have data
@@ -365,6 +365,43 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
             gpts[name].free()
 
+            # Calculate column sparsity after setting weights to zero
+            weight_matrix = gpts[name].layer.weight.data
+            # Calculate sparsity for each column (feature dimension)
+            column_sparsity = (weight_matrix == 0).sum(dim=0).float() / weight_matrix.shape[0]
+            column_sparsity = column_sparsity.cpu().numpy()
+
+            # Determine matrix type from layer name
+            if "self_attn.q_proj" in name:
+                mat_type = "q_proj"
+            elif "self_attn.k_proj" in name:
+                mat_type = "k_proj"
+            elif "self_attn.v_proj" in name:
+                mat_type = "v_proj"
+            elif "self_attn.o_proj" in name:
+                mat_type = "o_proj"
+            elif "mlp.gate_proj" in name:
+                mat_type = "gate_proj"
+            elif "mlp.up_proj" in name:
+                mat_type = "up_proj"
+            elif "mlp.down_proj" in name:
+                mat_type = "down_proj"
+            else:
+                # Extract the last part of the name for other matrix types
+                mat_type = name.split('.')[-1]
+
+            # Store sparsity data by matrix type
+            if mat_type not in sparsity_data:
+                sparsity_data[mat_type] = []
+
+            # Add layer index and column sparsities
+            for col_idx, sparsity_val in enumerate(column_sparsity):
+                sparsity_data[mat_type].append({
+                    'layer_idx': i,
+                    'column_idx': col_idx,
+                    'sparsity': float(sparsity_val)
+                })
+
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
 
@@ -375,6 +412,42 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
 
     model.config.use_cache = use_cache
     torch.cuda.empty_cache()
+
+    # Store sparsity data in DuckDB
+    if sparsity_data:
+        conn = duckdb.connect("./sparsity.db")
+
+        for mat_type, data_list in sparsity_data.items():
+            if data_list:  # Only process if we have data
+                table_name = f"sparsegpt_{str(args.sparsity_ratio).replace('.', '_')}_{mat_type}"
+
+                # Create table with dynamic columns based on the maximum column index
+                max_col_idx = max([d['column_idx'] for d in data_list])
+                columns = ['layer_idx INTEGER'] + [f'col_{i} REAL' for i in range(max_col_idx + 1)]
+                create_table_sql = f"CREATE TABLE {table_name} ({', '.join(columns)})"
+                conn.execute(create_table_sql)
+
+                # Group data by layer
+                layer_data = {}
+                for item in data_list:
+                    layer_idx = item['layer_idx']
+                    if layer_idx not in layer_data:
+                        layer_data[layer_idx] = {}
+                    layer_data[layer_idx][item['column_idx']] = item['sparsity']
+
+                # Insert data row by row (one row per layer)
+                for layer_idx, col_sparsities in layer_data.items():
+                    values = [layer_idx]
+                    for col_idx in range(max_col_idx + 1):
+                        values.append(col_sparsities.get(col_idx, 0.0))
+
+                    placeholders = ', '.join(['?' for _ in values])
+                    insert_sql = f"INSERT INTO {table_name} VALUES ({placeholders})"
+                    conn.execute(insert_sql, values)
+
+                print(f"Created table {table_name} with {len(layer_data)} rows and {max_col_idx + 1} columns")
+
+        conn.close()
 
 
 
