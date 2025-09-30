@@ -256,7 +256,7 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
 
         for mat_type, data_list in sparsity_data.items():
             if data_list:  # Only process if we have data
-                table_name = f"wanda_{args.sparsity_ratio}_{mat_type}"
+                table_name = f"wanda_{str(args.sparsity_ratio).replace('.', '_')}_{mat_type}"
 
                 # Create table with dynamic columns based on the maximum column index
                 max_col_idx = max([d['column_idx'] for d in data_list])
