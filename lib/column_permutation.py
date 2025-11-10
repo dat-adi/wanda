@@ -81,6 +81,38 @@ def compute_group_metrics(matrix: torch.Tensor, indices: List[int]) -> Dict:
     }
 
 
+def compute_pairwise_hamming_distances(subset: torch.Tensor) -> torch.Tensor:
+    """
+    Compute all pairwise Hamming distances for a subset of columns.
+
+    Args:
+        subset: Weight matrix subset [D, N] where N is number of columns in group
+
+    Returns:
+        Distance matrix [N, N] with pairwise Hamming distances
+    """
+    N = subset.shape[1]
+    D = subset.shape[0]
+
+    # Convert to binary
+    binary_subset = (subset != 0).int()
+    binary_float = binary_subset.float()
+
+    # Compute dot products (counts matching 1s)
+    dot_products = binary_float.T @ binary_float  # [N, N]
+
+    # Count of 1s in each column
+    ones_count = binary_subset.sum(dim=0)  # [N]
+
+    # Hamming distance formula: hamming(i, j) = (ones_i + ones_j - 2 * matches) / D
+    ones_count_i = ones_count.unsqueeze(1)  # [N, 1]
+    ones_count_j = ones_count.unsqueeze(0)  # [1, N]
+
+    distance_matrix = (ones_count_i + ones_count_j - 2 * dot_products).float() / D
+
+    return distance_matrix
+
+
 def sample_groups_exhaustive(
     matrix: torch.Tensor,
     group_size: int = 8
@@ -111,7 +143,7 @@ def sample_groups_exhaustive(
         seed_idx = random.choice(available_features)
 
         # Find nearest neighbors
-        indices, distances = find_nearest_neighbors_excluding(
+        indices, _ = find_nearest_neighbors_excluding(
             matrix, seed_idx, group_size - 1, excluded_indices
         )
 
@@ -119,7 +151,12 @@ def sample_groups_exhaustive(
         for idx in indices.tolist():
             excluded_indices.add(idx)
 
-        mean_dist = distances.mean().item()
+        # Extract the subset of columns for this group
+        subset = matrix[:, indices]
+
+        # Compute pairwise Hamming distances for all pairs in the group
+        pairwise_dist = compute_pairwise_hamming_distances(subset)
+        mean_dist = pairwise_dist.mean().item()
 
         # Compute detailed metrics for this group
         metrics = compute_group_metrics(matrix, indices.tolist())
@@ -241,91 +278,122 @@ def visualize_group_metrics(
     layer_name: str,
     output_path: Path
 ):
-    """Create comprehensive visualization of group metrics."""
-    fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(f'Layer {layer_idx} - {layer_name}\nGroup-wise Metrics (Sorted by Hamming Distance: Low → High)',
+    """Create comprehensive visualization matching the original style."""
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig.suptitle(f'Layer {layer_idx} - {layer_name}\nGroup Metrics Analysis (Sorted by Mean Distance)',
                  fontsize=16, fontweight='bold')
 
-    # Use sequential indices for x-axis since groups are already sorted
+    # Extract data (groups are already sorted by mean distance)
     num_groups = len(groups)
-    sorted_indices = list(range(num_groups))
+    group_numbers = [i + 1 for i in range(num_groups)]  # 1-indexed
     mean_distances = [g['mean_distance'] for g in groups]
     zero_rows = [g['metrics']['zero_rows'] for g in groups]
     one_rows = [g['metrics']['one_rows'] for g in groups]
     densities = [g['metrics']['density'] for g in groups]
     unique_rows = [g['metrics']['unique_rows'] for g in groups]
 
-    # Plot 1: Mean Hamming Distance
-    axes[0, 0].plot(sorted_indices, mean_distances, linewidth=1.5, alpha=0.7)
-    axes[0, 0].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
-    axes[0, 0].set_ylabel('Mean Hamming Distance', fontsize=11)
-    axes[0, 0].set_title('Mean Hamming Distance per Group', fontsize=12, fontweight='bold')
-    axes[0, 0].grid(True, alpha=0.3)
-    axes[0, 0].axhline(y=sum(mean_distances)/len(mean_distances),
-                       color='r', linestyle='--', alpha=0.5, label='Average')
-    axes[0, 0].legend()
+    # Smart tick configuration based on number of groups
+    if num_groups <= 20:
+        tick_step = 1
+        rotation = 0
+        fontsize = 9
+    elif num_groups <= 50:
+        tick_step = 5
+        rotation = 45
+        fontsize = 8
+    elif num_groups <= 100:
+        tick_step = 10
+        rotation = 90
+        fontsize = 7
+    else:
+        tick_step = 20
+        rotation = 90
+        fontsize = 6
 
-    # Plot 2: Zero Rows
-    axes[0, 1].bar(sorted_indices, zero_rows, alpha=0.7, color='steelblue', width=1.0)
-    axes[0, 1].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
-    axes[0, 1].set_ylabel('Number of Zero Rows', fontsize=11)
-    axes[0, 1].set_title('All-Zero Rows per Group', fontsize=12, fontweight='bold')
-    axes[0, 1].grid(True, alpha=0.3, axis='y')
+    tick_positions = group_numbers[::tick_step]
+    tick_labels = [str(x) for x in tick_positions]
 
-    # Plot 3: One Rows
-    axes[0, 2].bar(sorted_indices, one_rows, alpha=0.7, color='coral', width=1.0)
-    axes[0, 2].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
-    axes[0, 2].set_ylabel('Number of One Rows', fontsize=11)
-    axes[0, 2].set_title('All-One Rows per Group', fontsize=12, fontweight='bold')
-    axes[0, 2].grid(True, alpha=0.3, axis='y')
+    def configure_xaxis(ax, group_numbers):
+        ax.set_xlim(0.5, len(group_numbers) + 0.5)
+        ax.set_xticks(tick_positions)
+        ax.set_xticklabels(tick_labels, rotation=rotation, fontsize=fontsize,
+                          ha='right' if rotation > 0 else 'center')
+
+    # Plot 1: Mean Hamming Distance (bar chart, not line)
+    ax1 = axes[0, 0]
+    ax1.bar(group_numbers, mean_distances, color='steelblue', alpha=0.7,
+            edgecolor='black', linewidth=0.5)
+    ax1.set_xlabel('Group Rank (by Mean Distance)', fontsize=11)
+    ax1.set_ylabel('Mean Hamming Distance', fontsize=11)
+    ax1.set_title('Mean Pairwise Hamming Distance by Group', fontsize=12, fontweight='bold')
+    ax1.grid(axis='y', alpha=0.3, linestyle='--')
+    configure_xaxis(ax1, group_numbers)
+
+    # Plot 2: All-Zero Rows
+    ax2 = axes[0, 1]
+    ax2.bar(group_numbers, zero_rows, color='coral', alpha=0.7,
+            edgecolor='black', linewidth=0.5)
+    ax2.set_xlabel('Group Rank (by Mean Distance)', fontsize=11)
+    ax2.set_ylabel('Count', fontsize=11)
+    ax2.set_title('All-Zero Rows by Group', fontsize=12, fontweight='bold')
+    ax2.grid(axis='y', alpha=0.3, linestyle='--')
+    configure_xaxis(ax2, group_numbers)
+
+    # Plot 3: All-One Rows
+    ax3 = axes[0, 2]
+    ax3.bar(group_numbers, one_rows, color='mediumseagreen', alpha=0.7,
+            edgecolor='black', linewidth=0.5)
+    ax3.set_xlabel('Group Rank (by Mean Distance)', fontsize=11)
+    ax3.set_ylabel('Count', fontsize=11)
+    ax3.set_title('All-One Rows by Group', fontsize=12, fontweight='bold')
+    ax3.grid(axis='y', alpha=0.3, linestyle='--')
+    configure_xaxis(ax3, group_numbers)
 
     # Plot 4: Density
-    axes[1, 0].plot(sorted_indices, densities, linewidth=1.5, alpha=0.7, color='green')
-    axes[1, 0].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
-    axes[1, 0].set_ylabel('Density', fontsize=11)
-    axes[1, 0].set_title('Density per Group', fontsize=12, fontweight='bold')
-    axes[1, 0].grid(True, alpha=0.3)
-    axes[1, 0].axhline(y=sum(densities)/len(densities),
-                       color='r', linestyle='--', alpha=0.5, label='Average')
-    axes[1, 0].legend()
+    ax4 = axes[1, 0]
+    ax4.bar(group_numbers, densities, color='mediumpurple', alpha=0.7,
+            edgecolor='black', linewidth=0.5)
+    ax4.set_xlabel('Group Rank (by Mean Distance)', fontsize=11)
+    ax4.set_ylabel('Density', fontsize=11)
+    ax4.set_title('Density by Group', fontsize=12, fontweight='bold')
+    ax4.grid(axis='y', alpha=0.3, linestyle='--')
+    configure_xaxis(ax4, group_numbers)
 
     # Plot 5: Unique Rows
-    axes[1, 1].plot(sorted_indices, unique_rows, linewidth=1.5, alpha=0.7, color='purple')
-    axes[1, 1].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
-    axes[1, 1].set_ylabel('Unique Rows', fontsize=11)
-    axes[1, 1].set_title('Unique Rows per Group', fontsize=12, fontweight='bold')
-    axes[1, 1].grid(True, alpha=0.3)
+    ax5 = axes[1, 1]
+    ax5.bar(group_numbers, unique_rows, color='gold', alpha=0.7,
+            edgecolor='black', linewidth=0.5)
+    ax5.set_xlabel('Group Rank (by Mean Distance)', fontsize=11)
+    ax5.set_ylabel('Count', fontsize=11)
+    ax5.set_title('Unique Rows by Group', fontsize=12, fontweight='bold')
+    ax5.grid(axis='y', alpha=0.3, linestyle='--')
+    configure_xaxis(ax5, group_numbers)
 
-    # Plot 6: Summary Statistics Table
+    # Plot 6: Summary Statistics (text panel)
     axes[1, 2].axis('off')
-    summary_stats = [
-        ['Metric', 'Mean', 'Min', 'Max'],
-        ['Hamming Dist', f'{sum(mean_distances)/len(mean_distances):.4f}',
-         f'{min(mean_distances):.4f}', f'{max(mean_distances):.4f}'],
-        ['Zero Rows', f'{sum(zero_rows)/len(zero_rows):.1f}',
-         f'{min(zero_rows)}', f'{max(zero_rows)}'],
-        ['One Rows', f'{sum(one_rows)/len(one_rows):.1f}',
-         f'{min(one_rows)}', f'{max(one_rows)}'],
-        ['Density', f'{sum(densities)/len(densities):.4f}',
-         f'{min(densities):.4f}', f'{max(densities):.4f}'],
-        ['Unique Rows', f'{sum(unique_rows)/len(unique_rows):.1f}',
-         f'{min(unique_rows)}', f'{max(unique_rows)}']
-    ]
-    table = axes[1, 2].table(cellText=summary_stats, cellLoc='center', loc='center',
-                             colWidths=[0.35, 0.25, 0.2, 0.2])
-    table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2)
 
-    # Style header row
-    for i in range(4):
-        table[(0, i)].set_facecolor('#4CAF50')
-        table[(0, i)].set_text_props(weight='bold', color='white')
+    total_zeros = sum(zero_rows)
+    total_ones = sum(one_rows)
+    avg_density = sum(densities) / len(densities)
+    avg_unique = sum(unique_rows) / len(unique_rows)
 
-    axes[1, 2].set_title('Summary Statistics', fontsize=12, fontweight='bold', pad=20)
+    summary_text = f"Summary Statistics:\n\n"
+    summary_text += f"Total Groups: {num_groups}\n"
+    summary_text += f"Group Size: 8\n\n"
+    summary_text += f"Avg Mean Distance: {sum(mean_distances)/len(mean_distances):.4f}\n"
+    summary_text += f"Min Mean Distance: {min(mean_distances):.4f}\n"
+    summary_text += f"Max Mean Distance: {max(mean_distances):.4f}\n\n"
+    summary_text += f"Total Zero Rows: {total_zeros}\n"
+    summary_text += f"Total One Rows: {total_ones}\n"
+    summary_text += f"Avg Density: {avg_density:.4f}\n"
+    summary_text += f"Avg Unique Rows: {avg_unique:.1f}"
+
+    axes[1, 2].text(0.1, 0.5, summary_text, fontsize=11,
+                   verticalalignment='center', fontfamily='monospace',
+                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.3))
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=150, bbox_inches='tight')
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()
 
 
