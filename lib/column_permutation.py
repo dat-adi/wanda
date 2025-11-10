@@ -6,6 +6,9 @@ matrix columns by Hamming distance similarity. It creates groups of 8 columns wh
 each group contains features that are spatially close in Hamming space, enabling
 efficient kernel processing with banded workload patterns.
 
+Groups are sorted by their mean Hamming distance (lowest to highest), creating a
+gradient from tightest clusters to loosest clusters in the permuted matrix.
+
 Usage:
     After weight pruning (line 206 in lib/prune.py), call:
 
@@ -136,9 +139,9 @@ def sample_groups_exhaustive(
 def create_permutation_matrix(
     groups: List[Dict],
     n_features: int
-) -> Tuple[torch.Tensor, List[int]]:
+) -> Tuple[torch.Tensor, List[int], List[Dict]]:
     """
-    Create permutation mapping from sampling groups.
+    Create permutation mapping from sampling groups, sorted by mean Hamming distance.
 
     Args:
         groups: List of group dictionaries
@@ -147,9 +150,14 @@ def create_permutation_matrix(
     Returns:
         permutation: Permutation tensor mapping old->new indices [N]
         permuted_indices: List of column indices in new order
+        sorted_groups: Groups sorted by mean Hamming distance (low to high)
     """
+    # Sort groups by mean Hamming distance (lowest to highest)
+    sorted_groups = sorted(groups, key=lambda g: g['mean_distance'])
+
+    # Build permuted indices from sorted groups
     permuted_indices = []
-    for group in groups:
+    for group in sorted_groups:
         permuted_indices.extend(group['indices'])
 
     # Add any remaining columns that weren't grouped
@@ -160,7 +168,7 @@ def create_permutation_matrix(
     # Create inverse mapping (new position -> old index)
     permutation = torch.tensor(permuted_indices, dtype=torch.long)
 
-    return permutation, permuted_indices
+    return permutation, permuted_indices, sorted_groups
 
 
 def visualize_permuted_matrix(
@@ -204,12 +212,12 @@ def visualize_permuted_matrix(
         ax.axvline(x=i * group_size - 0.5, color='red', linewidth=0.5, alpha=0.6)
 
     # Labels and title
-    ax.set_xlabel('Column Index (Permuted)', fontsize=12)
+    ax.set_xlabel('Column Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
     ax.set_ylabel('Row Index', fontsize=12)
     ax.set_title(
         f'Layer {layer_idx} - {layer_name}\n'
         f'Permuted Matrix (showing {n_cols}/{binary_matrix.shape[1]} columns)\n'
-        f'Groups: {len(groups)}, Group size: {group_size}',
+        f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance',
         fontsize=13,
         fontweight='bold'
     )
@@ -235,7 +243,7 @@ def visualize_group_metrics(
 ):
     """Create comprehensive visualization of group metrics."""
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
-    fig.suptitle(f'Layer {layer_idx} - {layer_name}\nGroup-wise Metrics',
+    fig.suptitle(f'Layer {layer_idx} - {layer_name}\nGroup-wise Metrics (Sorted by Hamming Distance: Low → High)',
                  fontsize=16, fontweight='bold')
 
     group_indices = [g['group_idx'] for g in groups]
@@ -419,29 +427,30 @@ def permute_and_visualize(
     # Sample groups
     groups = sample_groups_exhaustive(weight_matrix, group_size=group_size)
 
-    # Create permutation
-    permutation, _ = create_permutation_matrix(groups, weight_matrix.shape[1])
+    # Create permutation (sorts groups by mean Hamming distance)
+    permutation, _, sorted_groups = create_permutation_matrix(groups, weight_matrix.shape[1])
 
     # Generate sanitized layer name for filenames
     sanitized_name = layer_name.replace('.', '_')
 
-    # Save metrics
+    # Save metrics (using sorted groups for better readability)
     metrics_file = metrics_dir / f"layer_{layer_idx:02d}_{sanitized_name}_metrics.txt"
-    save_metrics(groups, layer_idx, layer_name, weight_matrix.shape, metrics_file)
+    save_metrics(sorted_groups, layer_idx, layer_name, weight_matrix.shape, metrics_file)
 
-    # Visualize permuted matrix
+    # Visualize permuted matrix (using sorted groups)
     image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted.png"
     visualize_permuted_matrix(
-        weight_matrix, permutation, groups, layer_idx, layer_name, image_file
+        weight_matrix, permutation, sorted_groups, layer_idx, layer_name, image_file
     )
 
-    # Visualize group metrics
+    # Visualize group metrics (using sorted groups)
     metrics_viz_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_group_metrics.png"
-    visualize_group_metrics(groups, layer_idx, layer_name, metrics_viz_file)
+    visualize_group_metrics(sorted_groups, layer_idx, layer_name, metrics_viz_file)
 
     return {
         'permutation': permutation,
         'groups': groups,
+        'sorted_groups': sorted_groups,
         'metrics_file': str(metrics_file),
         'image_file': str(image_file),
         'metrics_viz_file': str(metrics_viz_file),
