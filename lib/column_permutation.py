@@ -246,7 +246,9 @@ def visualize_group_metrics(
     fig.suptitle(f'Layer {layer_idx} - {layer_name}\nGroup-wise Metrics (Sorted by Hamming Distance: Low → High)',
                  fontsize=16, fontweight='bold')
 
-    group_indices = [g['group_idx'] for g in groups]
+    # Use sequential indices for x-axis since groups are already sorted
+    num_groups = len(groups)
+    sorted_indices = list(range(num_groups))
     mean_distances = [g['mean_distance'] for g in groups]
     zero_rows = [g['metrics']['zero_rows'] for g in groups]
     one_rows = [g['metrics']['one_rows'] for g in groups]
@@ -254,8 +256,8 @@ def visualize_group_metrics(
     unique_rows = [g['metrics']['unique_rows'] for g in groups]
 
     # Plot 1: Mean Hamming Distance
-    axes[0, 0].plot(group_indices, mean_distances, linewidth=1.5, alpha=0.7)
-    axes[0, 0].set_xlabel('Group Index', fontsize=11)
+    axes[0, 0].plot(sorted_indices, mean_distances, linewidth=1.5, alpha=0.7)
+    axes[0, 0].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
     axes[0, 0].set_ylabel('Mean Hamming Distance', fontsize=11)
     axes[0, 0].set_title('Mean Hamming Distance per Group', fontsize=12, fontweight='bold')
     axes[0, 0].grid(True, alpha=0.3)
@@ -264,22 +266,22 @@ def visualize_group_metrics(
     axes[0, 0].legend()
 
     # Plot 2: Zero Rows
-    axes[0, 1].bar(group_indices, zero_rows, alpha=0.7, color='steelblue', width=1.0)
-    axes[0, 1].set_xlabel('Group Index', fontsize=11)
+    axes[0, 1].bar(sorted_indices, zero_rows, alpha=0.7, color='steelblue', width=1.0)
+    axes[0, 1].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
     axes[0, 1].set_ylabel('Number of Zero Rows', fontsize=11)
     axes[0, 1].set_title('All-Zero Rows per Group', fontsize=12, fontweight='bold')
     axes[0, 1].grid(True, alpha=0.3, axis='y')
 
     # Plot 3: One Rows
-    axes[0, 2].bar(group_indices, one_rows, alpha=0.7, color='coral', width=1.0)
-    axes[0, 2].set_xlabel('Group Index', fontsize=11)
+    axes[0, 2].bar(sorted_indices, one_rows, alpha=0.7, color='coral', width=1.0)
+    axes[0, 2].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
     axes[0, 2].set_ylabel('Number of One Rows', fontsize=11)
     axes[0, 2].set_title('All-One Rows per Group', fontsize=12, fontweight='bold')
     axes[0, 2].grid(True, alpha=0.3, axis='y')
 
     # Plot 4: Density
-    axes[1, 0].plot(group_indices, densities, linewidth=1.5, alpha=0.7, color='green')
-    axes[1, 0].set_xlabel('Group Index', fontsize=11)
+    axes[1, 0].plot(sorted_indices, densities, linewidth=1.5, alpha=0.7, color='green')
+    axes[1, 0].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
     axes[1, 0].set_ylabel('Density', fontsize=11)
     axes[1, 0].set_title('Density per Group', fontsize=12, fontweight='bold')
     axes[1, 0].grid(True, alpha=0.3)
@@ -288,8 +290,8 @@ def visualize_group_metrics(
     axes[1, 0].legend()
 
     # Plot 5: Unique Rows
-    axes[1, 1].plot(group_indices, unique_rows, linewidth=1.5, alpha=0.7, color='purple')
-    axes[1, 1].set_xlabel('Group Index', fontsize=11)
+    axes[1, 1].plot(sorted_indices, unique_rows, linewidth=1.5, alpha=0.7, color='purple')
+    axes[1, 1].set_xlabel('Sorted Group Index (Low → High Distance)', fontsize=11)
     axes[1, 1].set_ylabel('Unique Rows', fontsize=11)
     axes[1, 1].set_title('Unique Rows per Group', fontsize=12, fontweight='bold')
     axes[1, 1].grid(True, alpha=0.3)
