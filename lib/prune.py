@@ -205,42 +205,25 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
 
             subset[name].weight.data[W_mask] = 0  ## set weights to zero
 
-            # Calculate column sparsity after setting weights to zero
-            weight_matrix = subset[name].weight.data
-            # Calculate sparsity for each column (feature dimension)
-            column_sparsity = (weight_matrix == 0).sum(dim=0).float() / weight_matrix.shape[0]
-            column_sparsity = column_sparsity.cpu().numpy()
+            # Adding the module to permute the columns based on hamming 
+            # distance
+            from .column_permutation import permute_and_visualize
 
-            # Determine matrix type from layer name
-            if "self_attn.q_proj" in name:
-                mat_type = "q_proj"
-            elif "self_attn.k_proj" in name:
-                mat_type = "k_proj"
-            elif "self_attn.v_proj" in name:
-                mat_type = "v_proj"
-            elif "self_attn.o_proj" in name:
-                mat_type = "o_proj"
-            elif "mlp.gate_proj" in name:
-                mat_type = "gate_proj"
-            elif "mlp.up_proj" in name:
-                mat_type = "up_proj"
-            elif "mlp.down_proj" in name:
-                mat_type = "down_proj"
-            else:
-                # Extract the last part of the name for other matrix types
-                mat_type = name.split('.')[-1]
+            # Configure output directories
+            output_dirs = {
+                'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
+                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}'
+            }
 
-            # Store sparsity data by matrix type
-            if mat_type not in sparsity_data:
-                sparsity_data[mat_type] = []
-
-            # Add layer index and column sparsities
-            for col_idx, sparsity_val in enumerate(column_sparsity):
-                sparsity_data[mat_type].append({
-                    'layer_idx': i,
-                    'column_idx': col_idx,
-                    'sparsity': float(sparsity_val)
-                })
+            # Perform column permutation analysis
+            result = permute_and_visualize(
+                weight_matrix=subset[name].weight.data,
+                layer_idx=i,
+                layer_name=name,
+                output_dirs=output_dirs,
+                group_size=8,
+                seed=args.seed if hasattr(args, 'seed') else 42
+            )
 
         for j in range(args.nsamples):
             with torch.no_grad():
