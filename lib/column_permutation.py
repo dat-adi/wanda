@@ -214,8 +214,7 @@ def visualize_permuted_matrix(
     groups: List[Dict],
     layer_idx: int,
     layer_name: str,
-    output_path: Path,
-    max_display_cols: int = 512
+    output_path: Path
 ):
     """
     Visualize the permuted binary matrix with group boundaries.
@@ -227,15 +226,14 @@ def visualize_permuted_matrix(
         layer_idx: Layer index
         layer_name: Layer name
         output_path: Path to save visualization
-        max_display_cols: Maximum columns to display (default: 512 for 64 groups)
     """
     # Permute columns
     permuted_matrix = matrix[:, permutation]
     binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
 
-    # Limit display size
-    n_cols = min(binary_matrix.shape[1], max_display_cols)
-    display_matrix = binary_matrix[:, :n_cols]
+    # Display full matrix
+    n_cols = binary_matrix.shape[1]
+    display_matrix = binary_matrix
 
     # Create figure
     fig, ax = plt.subplots(figsize=(16, 8))
@@ -253,7 +251,7 @@ def visualize_permuted_matrix(
     ax.set_ylabel('Row Index', fontsize=12)
     ax.set_title(
         f'Layer {layer_idx} - {layer_name}\n'
-        f'Permuted Matrix (showing {n_cols}/{binary_matrix.shape[1]} columns)\n'
+        f'Permuted Matrix ({n_cols} columns)\n'
         f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance',
         fontsize=13,
         fontweight='bold'
