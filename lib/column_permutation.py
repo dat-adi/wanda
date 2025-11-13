@@ -312,6 +312,12 @@ def visualize_permuted_matrix(
     # Plot binary heatmap
     im = ax.imshow(display_matrix, cmap='binary', aspect='auto', interpolation='nearest')
 
+    # Compute statistics for the display matrix
+    total_bits = display_matrix.size
+    num_zeros = np.sum(display_matrix == 0)
+    num_ones = np.sum(display_matrix == 1)
+    percent_zeros = (num_zeros / total_bits) * 100 if total_bits > 0 else 0
+
     # Labels and title
     ax.set_xlabel('Column Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
     ax.set_ylabel('Row Index', fontsize=12)
@@ -326,13 +332,15 @@ def visualize_permuted_matrix(
         title_text = (
             f'Layer {layer_idx} - {layer_name}\n'
             f'Permuted Matrix - {mode_desc[mode]} ({n_cols} groups)\n'
-            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance'
+            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance\n'
+            f'Zeros: {num_zeros:,} | Total bits: {total_bits:,} | Zero %: {percent_zeros:.2f}%'
         )
     else:
         title_text = (
             f'Layer {layer_idx} - {layer_name}\n'
             f'Permuted Matrix - {mode_desc[mode]} ({n_cols} columns)\n'
-            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance'
+            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance\n'
+            f'Zeros: {num_zeros:,} | Total bits: {total_bits:,} | Zero %: {percent_zeros:.2f}%'
         )
 
     ax.set_title(title_text, fontsize=13, fontweight='bold')
