@@ -312,16 +312,6 @@ def visualize_permuted_matrix(
     # Plot binary heatmap
     im = ax.imshow(display_matrix, cmap='binary', aspect='auto', interpolation='nearest')
 
-    # Add group boundaries
-    if mode == 'compress':
-        # In compress mode, each column represents a group, so boundaries are between each column
-        for i in range(1, n_cols):
-            ax.axvline(x=i - 0.5, color='red', linewidth=0.5, alpha=0.6)
-    else:
-        # In normal and line modes, groups are every 8 columns
-        for i in range(1, n_cols // group_size):
-            ax.axvline(x=i * group_size - 0.5, color='red', linewidth=0.5, alpha=0.6)
-
     # Labels and title
     ax.set_xlabel('Column Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
     ax.set_ylabel('Row Index', fontsize=12)
@@ -350,10 +340,6 @@ def visualize_permuted_matrix(
     # Colorbar
     cbar = plt.colorbar(im, ax=ax, fraction=0.02, pad=0.04)
     cbar.set_label('Weight Active (0=pruned, 1=active)', fontsize=10)
-
-    # Add legend for group boundaries
-    red_patch = mpatches.Patch(color='red', alpha=0.6, label='Group boundary')
-    ax.legend(handles=[red_patch], loc='upper right', fontsize=10)
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches='tight')
