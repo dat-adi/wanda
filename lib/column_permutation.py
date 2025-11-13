@@ -548,8 +548,8 @@ def permute_and_visualize(
     output_dirs: Dict[str, str],
     group_size: int = 8,
     seed: int = 42,
-    viz_normal: bool = False,
-    viz_line: bool = True,
+    viz_normal: bool = True,
+    viz_line: bool = False,
     viz_compress: bool = True
 ) -> Dict:
     """

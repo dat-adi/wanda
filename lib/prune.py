@@ -2,7 +2,6 @@ import time
 import heapq
 import torch
 import torch.nn as nn
-import duckdb
 from .sparsegpt import SparseGPT
 from .layerwrapper import WrappedGPT
 from .data import get_loaders
