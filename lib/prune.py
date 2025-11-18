@@ -208,7 +208,8 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
             # Configure output directories
             output_dirs = {
                 'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}'
+                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
+                'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
             }
 
             # Perform column permutation analysis
@@ -218,7 +219,9 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
                 layer_name=name,
                 output_dirs=output_dirs,
                 group_size=8,
-                seed=args.seed if hasattr(args, 'seed') else 42
+                seed=args.seed if hasattr(args, 'seed') else 42,
+                save_permuted=getattr(args, 'save_permuted', False),
+                save_line=getattr(args, 'save_line', False)
             )
 
         for j in range(args.nsamples):
@@ -317,7 +320,8 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             # Configure output directories
             output_dirs = {
                 'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}'
+                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
+                'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
             }
 
             # Perform column permutation analysis
@@ -327,7 +331,9 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
                 layer_name=name,
                 output_dirs=output_dirs,
                 group_size=8,
-                seed=args.seed if hasattr(args, 'seed') else 42
+                seed=args.seed if hasattr(args, 'seed') else 42,
+                save_permuted=getattr(args, 'save_permuted', False),
+                save_line=getattr(args, 'save_line', False)
             )
 
         for j in range(args.nsamples):

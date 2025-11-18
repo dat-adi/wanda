@@ -550,7 +550,9 @@ def permute_and_visualize(
     seed: int = 42,
     viz_normal: bool = True,
     viz_line: bool = False,
-    viz_compress: bool = True
+    viz_compress: bool = True,
+    save_permuted: bool = False,
+    save_line: bool = False
 ) -> Dict:
     """
     Main entry point: perform column permutation analysis and visualization.
@@ -565,6 +567,8 @@ def permute_and_visualize(
         viz_normal: Generate normal/standard visualization (default: True)
         viz_line: Generate line-filled visualization (default: False)
         viz_compress: Generate compressed visualization (default: False)
+        save_permuted: Save permuted matrix to workloads directory (default: False)
+        save_line: Save line-transformed matrix to workloads directory (default: False)
 
     Returns:
         Dictionary containing:
@@ -579,8 +583,10 @@ def permute_and_visualize(
     # Create output directories
     metrics_dir = Path(output_dirs['metrics'])
     images_dir = Path(output_dirs['images'])
+    workloads_dir = Path(output_dirs['workloads'])
     metrics_dir.mkdir(parents=True, exist_ok=True)
     images_dir.mkdir(parents=True, exist_ok=True)
+    workloads_dir.mkdir(parents=True, exist_ok=True)
 
     # Sample groups
     groups = sample_groups_exhaustive(weight_matrix, group_size=group_size)
@@ -590,6 +596,22 @@ def permute_and_visualize(
 
     # Generate sanitized layer name for filenames
     sanitized_name = layer_name.replace('.', '_')
+
+    # Save permuted matrix to workloads directory if enabled
+    permuted_file = None
+    if save_permuted:
+        permuted_matrix = weight_matrix[:, permutation]
+        permuted_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted.pt"
+        torch.save(permuted_matrix, permuted_file)
+
+    # Save line-transformed matrix to workloads directory if enabled
+    line_file = None
+    if save_line:
+        permuted_matrix = weight_matrix[:, permutation]
+        binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
+        line_matrix = apply_line_transform(binary_matrix, group_size)
+        line_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_line.pt"
+        torch.save(torch.from_numpy(line_matrix), line_file)
 
     # Save metrics (using sorted groups for better readability)
     metrics_file = metrics_dir / f"layer_{layer_idx:02d}_{sanitized_name}_metrics.txt"
@@ -630,6 +652,8 @@ def permute_and_visualize(
         'metrics_file': str(metrics_file),
         'image_files': image_files,
         'metrics_viz_file': str(metrics_viz_file),
+        'permuted_file': str(permuted_file) if permuted_file else None,
+        'line_file': str(line_file) if line_file else None,
         'n_groups': len(groups),
         'avg_mean_distance': sum(g['mean_distance'] for g in groups) / len(groups) if groups else 0
     }

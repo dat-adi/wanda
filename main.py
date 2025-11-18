@@ -40,6 +40,8 @@ def main():
     parser.add_argument('--save_model', type=str, default=None, help='Path to save the pruned model.')
 
     parser.add_argument("--eval_zero_shot", action="store_true")
+    parser.add_argument("--save_line", action="store_true", help="Save line-transformed matrix to workloads directory")
+    parser.add_argument("--save_permuted", action="store_true", help="Save permuted matrix to workloads directory")
     args = parser.parse_args()
 
     # Setting seeds for reproducibility
