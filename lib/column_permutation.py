@@ -267,6 +267,57 @@ def apply_compress_transform(binary_matrix: np.ndarray, group_size: int = 8) -> 
     return np.column_stack(compressed_cols)
 
 
+def apply_line_transform_rows(binary_matrix: np.ndarray, group_size: int = 8) -> np.ndarray:
+    """
+    Apply line transformation along row groups: for each group of group_size rows,
+    if any column has a 1 within the group, set all rows in that group for that column to 1.
+
+    Args:
+        binary_matrix: Binary matrix [D, N]
+        group_size: Size of each row group (default: 8)
+
+    Returns:
+        Transformed matrix [D, N]
+    """
+    display_matrix = binary_matrix.copy()
+    n_groups = binary_matrix.shape[0] // group_size
+
+    for group_idx in range(n_groups):
+        start_row = group_idx * group_size
+        end_row = start_row + group_size
+        group = display_matrix[start_row:end_row, :]
+        # For each column, if there's any 1 in the row-group, set all rows in the group to 1
+        has_activation = (group.sum(axis=0) > 0).reshape(1, -1)
+        display_matrix[start_row:end_row, :] = np.ones((group_size, 1), dtype=int) * has_activation
+
+    return display_matrix
+
+
+def apply_compress_transform_rows(binary_matrix: np.ndarray, group_size: int = 8) -> np.ndarray:
+    """
+    Apply compress transformation along row groups: apply row line transform then
+    compress each row group to a single representative row.
+
+    Args:
+        binary_matrix: Binary matrix [D, N]
+        group_size: Size of each row group (default: 8)
+
+    Returns:
+        Compressed matrix [D_groups, N]
+    """
+    temp_matrix = apply_line_transform_rows(binary_matrix, group_size)
+    n_groups = binary_matrix.shape[0] // group_size
+
+    compressed_rows = []
+    for group_idx in range(n_groups):
+        start_row = group_idx * group_size
+        group = temp_matrix[start_row:start_row + group_size, :]
+        # Take any row (they're all the same after line transformation)
+        compressed_rows.append(group[0, :])
+
+    return np.row_stack(compressed_rows)
+
+
 def visualize_permuted_matrix(
     matrix: torch.Tensor,
     permutation: torch.Tensor,
@@ -274,37 +325,56 @@ def visualize_permuted_matrix(
     layer_idx: int,
     layer_name: str,
     output_path: Path,
-    mode: str = 'normal'
+    mode: str = 'normal',
+    axis: str = 'columns',
+    group_size: int = 8,
 ):
     """
     Visualize the permuted binary matrix with group boundaries.
 
     Args:
         matrix: Original weight matrix [D, N]
-        permutation: Permutation indices [N]
+        permutation: Permutation indices along the selected axis
         groups: List of group dictionaries
         layer_idx: Layer index
         layer_name: Layer name
         output_path: Path to save visualization
         mode: Visualization mode - 'normal', 'line', or 'compress'
+        axis: Permutation axis - 'columns' (horizontal) or 'rows' (vertical)
+        group_size: Number of features per group
     """
-    # Permute columns
-    permuted_matrix = matrix[:, permutation]
+    # Apply permutation to the correct axis
+    if axis == 'rows':
+        permuted_matrix = matrix[permutation, :]
+    else:
+        permuted_matrix = matrix[:, permutation]
     binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
 
-    # Apply transformation based on mode
-    group_size = 8
-    if mode == 'normal':
-        display_matrix = apply_normal_transform(binary_matrix)
-        n_cols = binary_matrix.shape[1]
-    elif mode == 'line':
-        display_matrix = apply_line_transform(binary_matrix, group_size)
-        n_cols = binary_matrix.shape[1]
-    elif mode == 'compress':
-        display_matrix = apply_compress_transform(binary_matrix, group_size)
-        n_cols = display_matrix.shape[1]  # Number of groups
+    # Apply transformation based on mode and axis
+    if axis == 'rows':
+        if mode == 'normal':
+            display_matrix = apply_normal_transform(binary_matrix)
+            n_dim = binary_matrix.shape[0]
+        elif mode == 'line':
+            display_matrix = apply_line_transform_rows(binary_matrix, group_size)
+            n_dim = binary_matrix.shape[0]
+        elif mode == 'compress':
+            display_matrix = apply_compress_transform_rows(binary_matrix, group_size)
+            n_dim = display_matrix.shape[0]
+        else:
+            raise ValueError(f"Invalid mode: {mode}. Must be 'normal', 'line', or 'compress'.")
     else:
-        raise ValueError(f"Invalid mode: {mode}. Must be 'normal', 'line', or 'compress'.")
+        if mode == 'normal':
+            display_matrix = apply_normal_transform(binary_matrix)
+            n_dim = binary_matrix.shape[1]
+        elif mode == 'line':
+            display_matrix = apply_line_transform(binary_matrix, group_size)
+            n_dim = binary_matrix.shape[1]
+        elif mode == 'compress':
+            display_matrix = apply_compress_transform(binary_matrix, group_size)
+            n_dim = display_matrix.shape[1]
+        else:
+            raise ValueError(f"Invalid mode: {mode}. Must be 'normal', 'line', or 'compress'.")
 
     # Create figure
     fig, ax = plt.subplots(figsize=(16, 8))
@@ -318,30 +388,28 @@ def visualize_permuted_matrix(
     num_ones = np.sum(display_matrix == 1)
     percent_zeros = (num_zeros / total_bits) * 100 if total_bits > 0 else 0
 
-    # Labels and title
-    ax.set_xlabel('Column Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
-    ax.set_ylabel('Row Index', fontsize=12)
+    # Labels — swap axes based on permutation direction
+    if axis == 'rows':
+        ax.set_xlabel('Column Index', fontsize=12)
+        ax.set_ylabel('Row Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
+        axis_unit = 'row groups' if mode == 'compress' else 'rows'
+    else:
+        ax.set_xlabel('Column Index (Permuted - Sorted by Hamming Distance)', fontsize=12)
+        ax.set_ylabel('Row Index', fontsize=12)
+        axis_unit = 'groups' if mode == 'compress' else 'columns'
 
     mode_desc = {
         'normal': 'Standard',
-        'line': 'Line-filled (row-wise OR per group)',
-        'compress': 'Compressed (1 col per group)'
+        'line': 'Line-filled (per group)',
+        'compress': 'Compressed (1 per group)'
     }
 
-    if mode == 'compress':
-        title_text = (
-            f'Layer {layer_idx} - {layer_name}\n'
-            f'Permuted Matrix - {mode_desc[mode]} ({n_cols} groups)\n'
-            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance\n'
-            f'Zeros: {num_zeros:,} | Total bits: {total_bits:,} | Zero %: {percent_zeros:.2f}%'
-        )
-    else:
-        title_text = (
-            f'Layer {layer_idx} - {layer_name}\n'
-            f'Permuted Matrix - {mode_desc[mode]} ({n_cols} columns)\n'
-            f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance\n'
-            f'Zeros: {num_zeros:,} | Total bits: {total_bits:,} | Zero %: {percent_zeros:.2f}%'
-        )
+    title_text = (
+        f'Layer {layer_idx} - {layer_name}\n'
+        f'Permuted Matrix - {mode_desc[mode]} ({n_dim} {axis_unit}, axis={axis})\n'
+        f'Groups: {len(groups)}, Group size: {group_size} | Sorted: Low → High Hamming Distance\n'
+        f'Zeros: {num_zeros:,} | Total bits: {total_bits:,} | Zero %: {percent_zeros:.2f}%'
+    )
 
     ax.set_title(title_text, fontsize=13, fontweight='bold')
 
@@ -547,6 +615,7 @@ def permute_and_visualize(
     layer_name: str,
     output_dirs: Dict[str, str],
     group_size: int = 8,
+    axis: str = 'columns',
     seed: int = 42,
     viz_normal: bool = True,
     viz_line: bool = False,
@@ -555,27 +624,37 @@ def permute_and_visualize(
     save_line: bool = False
 ) -> Dict:
     """
-    Main entry point: perform column permutation analysis and visualization.
+    Main entry point: perform exhaustive Hamming-distance permutation analysis and visualization.
+
+    Groups are formed by exhaustive sampling without replacement, each containing
+    group_size features (columns or rows) that are close in Hamming space.
+    Groups are then sorted by their mean pairwise Hamming distance (lowest first),
+    so the permuted matrix runs from tightest to loosest clusters.
 
     Args:
         weight_matrix: Pruned weight matrix [D, N]
         layer_idx: Layer index in the model
         layer_name: Name of the layer (e.g., 'self_attn.q_proj')
-        output_dirs: Dictionary with 'metrics' and 'images' output directories
-        group_size: Size of each group (default: 8)
+        output_dirs: Dictionary with 'metrics', 'images', and 'workloads' output directories
+        group_size: Number of features per group (default: 8)
+        axis: Axis to permute - 'columns' (horizontal) or 'rows' (vertical) (default: 'columns')
         seed: Random seed for reproducibility
         viz_normal: Generate normal/standard visualization (default: True)
         viz_line: Generate line-filled visualization (default: False)
-        viz_compress: Generate compressed visualization (default: False)
-        save_permuted: Save permuted matrix to workloads directory (default: False)
+        viz_compress: Generate compressed visualization (default: True)
+        save_permuted: Save permuted matrix + permutation order to workloads directory (default: False)
         save_line: Save line-transformed matrix to workloads directory (default: False)
 
     Returns:
         Dictionary containing:
-            - permutation: Permutation tensor [N]
+            - permutation: Permutation tensor along selected axis
             - groups: List of group dictionaries
+            - sorted_groups: Groups sorted by mean Hamming distance
             - metrics_file: Path to saved metrics file
-            - image_files: Dictionary of generated image files by mode
+            - image_files: Dictionary of generated image file paths by mode
+            - permuted_file: Path to saved permuted matrix (or None)
+            - perm_order_file: Path to saved permutation order tensor (or None)
+            - line_file: Path to saved line-transformed matrix (or None)
     """
     random.seed(seed)
     torch.manual_seed(seed)
@@ -588,29 +667,44 @@ def permute_and_visualize(
     images_dir.mkdir(parents=True, exist_ok=True)
     workloads_dir.mkdir(parents=True, exist_ok=True)
 
-    # Sample groups
-    groups = sample_groups_exhaustive(weight_matrix, group_size=group_size)
+    # For row permutation, transpose so the column grouping logic applies to rows
+    working_matrix = weight_matrix.T if axis == 'rows' else weight_matrix
 
-    # Create permutation (sorts groups by mean Hamming distance)
-    permutation, _, sorted_groups = create_permutation_matrix(groups, weight_matrix.shape[1])
+    # Sample groups using exhaustive Hamming-distance-based grouping
+    groups = sample_groups_exhaustive(working_matrix, group_size=group_size)
+
+    # Create permutation — sorts groups by mean Hamming distance (low → high)
+    permutation, _, sorted_groups = create_permutation_matrix(groups, working_matrix.shape[1])
 
     # Generate sanitized layer name for filenames
     sanitized_name = layer_name.replace('.', '_')
 
-    # Save permuted matrix to workloads directory if enabled
+    # Save permuted matrix and permutation order to workloads directory if enabled
     permuted_file = None
+    perm_order_file = None
     if save_permuted:
-        permuted_matrix = weight_matrix[:, permutation]
-        permuted_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted.pt"
+        if axis == 'rows':
+            permuted_matrix = weight_matrix[permutation, :]
+        else:
+            permuted_matrix = weight_matrix[:, permutation]
+        permuted_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_permuted.pt"
         torch.save(permuted_matrix, permuted_file)
+        # Save the permutation order separately so it can be re-applied to non-binary weights
+        perm_order_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_perm_order.pt"
+        torch.save(permutation, perm_order_file)
 
     # Save line-transformed matrix to workloads directory if enabled
     line_file = None
     if save_line:
-        permuted_matrix = weight_matrix[:, permutation]
-        binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
-        line_matrix = apply_line_transform(binary_matrix, group_size)
-        line_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_line.pt"
+        if axis == 'rows':
+            permuted_matrix = weight_matrix[permutation, :]
+            binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
+            line_matrix = apply_line_transform_rows(binary_matrix, group_size)
+        else:
+            permuted_matrix = weight_matrix[:, permutation]
+            binary_matrix = (permuted_matrix != 0).int().cpu().numpy()
+            line_matrix = apply_line_transform(binary_matrix, group_size)
+        line_file = workloads_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_line.pt"
         torch.save(torch.from_numpy(line_matrix), line_file)
 
     # Save metrics (using sorted groups for better readability)
@@ -621,23 +715,26 @@ def permute_and_visualize(
     image_files = {}
 
     if viz_normal:
-        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted_normal.png"
+        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_permuted_normal.png"
         visualize_permuted_matrix(
-            weight_matrix, permutation, sorted_groups, layer_idx, layer_name, image_file, mode='normal'
+            weight_matrix, permutation, sorted_groups, layer_idx, layer_name,
+            image_file, mode='normal', axis=axis, group_size=group_size
         )
         image_files['normal'] = str(image_file)
 
     if viz_line:
-        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted_line.png"
+        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_permuted_line.png"
         visualize_permuted_matrix(
-            weight_matrix, permutation, sorted_groups, layer_idx, layer_name, image_file, mode='line'
+            weight_matrix, permutation, sorted_groups, layer_idx, layer_name,
+            image_file, mode='line', axis=axis, group_size=group_size
         )
         image_files['line'] = str(image_file)
 
     if viz_compress:
-        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_permuted_compress.png"
+        image_file = images_dir / f"layer_{layer_idx:02d}_{sanitized_name}_{axis}_permuted_compress.png"
         visualize_permuted_matrix(
-            weight_matrix, permutation, sorted_groups, layer_idx, layer_name, image_file, mode='compress'
+            weight_matrix, permutation, sorted_groups, layer_idx, layer_name,
+            image_file, mode='compress', axis=axis, group_size=group_size
         )
         image_files['compress'] = str(image_file)
 
@@ -653,6 +750,7 @@ def permute_and_visualize(
         'image_files': image_files,
         'metrics_viz_file': str(metrics_viz_file),
         'permuted_file': str(permuted_file) if permuted_file else None,
+        'perm_order_file': str(perm_order_file) if perm_order_file else None,
         'line_file': str(line_file) if line_file else None,
         'n_groups': len(groups),
         'avg_mean_distance': sum(g['mean_distance'] for g in groups) / len(groups) if groups else 0

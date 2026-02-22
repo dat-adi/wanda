@@ -41,7 +41,11 @@ def main():
 
     parser.add_argument("--eval_zero_shot", action="store_true")
     parser.add_argument("--save_line", action="store_true", help="Save line-transformed matrix to workloads directory")
-    parser.add_argument("--save_permuted", action="store_true", help="Save permuted matrix to workloads directory")
+    parser.add_argument("--save_permuted", action="store_true", help="Save Hamming-distance-permuted matrix (and permutation order) to workloads directory")
+    parser.add_argument("--target_layer", type=int, default=0, help="Layer index to save permuted workload matrices for (default: 0)")
+    parser.add_argument("--group_size", type=int, default=8, help="Number of features per Hamming-distance group (default: 8)")
+    parser.add_argument("--permute_axis", type=str, default="columns", choices=["columns", "rows"],
+                        help="Axis to permute: 'columns' (horizontal) or 'rows' (vertical) (default: columns)")
     args = parser.parse_args()
 
     # Setting seeds for reproducibility

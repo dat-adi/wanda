@@ -200,29 +200,29 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
                     W_mask.scatter_(1, indices, True)
 
             subset[name].weight.data[W_mask] = 0  ## set weights to zero
-            weight_matrix = subset[name].weight.data
-            # Adding the module to permute the columns based on hamming 
-            # distance
-            from .column_permutation import permute_and_visualize
 
-            # Configure output directories
-            output_dirs = {
-                'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
-                'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
-            }
+            # Perform permutation analysis only for the target layer
+            target_layer = getattr(args, 'target_layer', 0)
+            if i == target_layer and getattr(args, 'save_permuted', False):
+                from .column_permutation import permute_and_visualize
 
-            # Perform column permutation analysis
-            result = permute_and_visualize(
-                weight_matrix=weight_matrix,
-                layer_idx=i,
-                layer_name=name,
-                output_dirs=output_dirs,
-                group_size=8,
-                seed=args.seed if hasattr(args, 'seed') else 42,
-                save_permuted=getattr(args, 'save_permuted', False),
-                save_line=getattr(args, 'save_line', False)
-            )
+                output_dirs = {
+                    'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
+                    'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
+                    'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
+                }
+
+                result = permute_and_visualize(
+                    weight_matrix=subset[name].weight.data,
+                    layer_idx=i,
+                    layer_name=name,
+                    output_dirs=output_dirs,
+                    group_size=getattr(args, 'group_size', 8),
+                    axis=getattr(args, 'permute_axis', 'columns'),
+                    seed=args.seed if hasattr(args, 'seed') else 42,
+                    save_permuted=True,
+                    save_line=getattr(args, 'save_line', False)
+                )
 
         for j in range(args.nsamples):
             with torch.no_grad():
@@ -310,31 +310,28 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             gpts[name].fasterprune(args.sparsity_ratio, prune_n=prune_n, prune_m=prune_m, percdamp=0.01, blocksize=128)
             gpts[name].free()
 
-            # Calculate column sparsity after setting weights to zero
-            weight_matrix = gpts[name].layer.weight.data
+            # Perform permutation analysis only for the target layer
+            target_layer = getattr(args, 'target_layer', 0)
+            if i == target_layer and getattr(args, 'save_permuted', False):
+                from .column_permutation import permute_and_visualize
 
-            # Adding the module to permute the columns based on hamming 
-            # distance
-            from .column_permutation import permute_and_visualize
+                output_dirs = {
+                    'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
+                    'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
+                    'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
+                }
 
-            # Configure output directories
-            output_dirs = {
-                'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
-                'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
-            }
-
-            # Perform column permutation analysis
-            result = permute_and_visualize(
-                weight_matrix=weight_matrix,
-                layer_idx=i,
-                layer_name=name,
-                output_dirs=output_dirs,
-                group_size=8,
-                seed=args.seed if hasattr(args, 'seed') else 42,
-                save_permuted=getattr(args, 'save_permuted', False),
-                save_line=getattr(args, 'save_line', False)
-            )
+                result = permute_and_visualize(
+                    weight_matrix=gpts[name].layer.weight.data,
+                    layer_idx=i,
+                    layer_name=name,
+                    output_dirs=output_dirs,
+                    group_size=getattr(args, 'group_size', 8),
+                    axis=getattr(args, 'permute_axis', 'columns'),
+                    seed=args.seed if hasattr(args, 'seed') else 42,
+                    save_permuted=True,
+                    save_line=getattr(args, 'save_line', False)
+                )
 
         for j in range(args.nsamples):
             outs[j] = layer(inps[j].unsqueeze(0), attention_mask=attention_mask, position_ids=position_ids)[0]
