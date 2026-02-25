@@ -7,17 +7,26 @@
 # Target hardware: g6.2xlarge (1x NVIDIA L4, 24 GB VRAM)
 #
 # Usage:
-#   bash scripts/run_layer0_sparsity.sh
+#   bash scripts/run_layer0_sparsity.sh [OPTIONS]
 #
-# Outputs land in:
-#   permutation_results/workloads/sparsity_<X>/   <- permuted .pt + perm_order .pt
-#   permutation_results/metrics/sparsity_<X>/     <- per-group text metrics
-#   permutation_results/images/sparsity_<X>/      <- visualizations
-#   permutation_results/logs/sparsity_<X>/        <- perplexity log
+# Options:
+#   --prune_method  wanda|sparsegpt          (default: wanda)
+#   --group_size    <int>                    (default: 8)
+#   --permute_axis  columns|rows             (default: columns)
+#   --base_output   <path>                   (default: ./permutation_results)
+#   --model         <hf_model_id_or_path>    (default: baffo32/decapoda-research-llama-7B-hf)
+#   --cache_dir     <path>                   (default: llm_weights)
+#   --target_layer  <int>                    (default: 0)
+#
+# Outputs land in <base_output>/:
+#   workloads/sparsity_<X>/   <- permuted .pt + perm_order .pt
+#   metrics/sparsity_<X>/     <- per-group text metrics
+#   images/sparsity_<X>/      <- visualizations
+#   logs/sparsity_<X>/        <- perplexity log
 
 set -euo pipefail
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Defaults ─────────────────────────────────────────────────────────────────
 MODEL="baffo32/decapoda-research-llama-7B-hf"
 CACHE_DIR="llm_weights"
 PRUNE_METHOD="wanda"
@@ -25,6 +34,20 @@ TARGET_LAYER=0
 GROUP_SIZE=8
 PERMUTE_AXIS="columns"   # 'columns' (horizontal) or 'rows' (vertical)
 BASE_OUTPUT="./permutation_results"
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --prune_method)  PRUNE_METHOD="$2";  shift 2 ;;
+        --group_size)    GROUP_SIZE="$2";    shift 2 ;;
+        --permute_axis)  PERMUTE_AXIS="$2";  shift 2 ;;
+        --base_output)   BASE_OUTPUT="$2";   shift 2 ;;
+        --model)         MODEL="$2";         shift 2 ;;
+        --cache_dir)     CACHE_DIR="$2";     shift 2 ;;
+        --target_layer)  TARGET_LAYER="$2";  shift 2 ;;
+        *) echo "Unknown argument: $1"; exit 1 ;;
+    esac
+done
 
 export CUDA_VISIBLE_DEVICES=0
 
