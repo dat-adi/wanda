@@ -46,6 +46,8 @@ def main():
     parser.add_argument("--group_size", type=int, default=8, help="Number of features per Hamming-distance group (default: 8)")
     parser.add_argument("--permute_axis", type=str, default="columns", choices=["columns", "rows"],
                         help="Axis to permute: 'columns' (horizontal) or 'rows' (vertical) (default: columns)")
+    parser.add_argument("--base_output", type=str, default="./permutation_results",
+                        help="Base directory for permuted matrices, metrics, and images (default: ./permutation_results)")
     args = parser.parse_args()
 
     # Setting seeds for reproducibility

@@ -206,10 +206,11 @@ def prune_wanda(args, model, tokenizer, device=torch.device("cuda:0"), prune_n=0
             if i == target_layer and getattr(args, 'save_permuted', False):
                 from .column_permutation import permute_and_visualize
 
+                base_output = getattr(args, 'base_output', './permutation_results')
                 output_dirs = {
-                    'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                    'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
-                    'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
+                    'metrics': f'{base_output}/metrics/sparsity_{args.sparsity_ratio}',
+                    'images': f'{base_output}/images/sparsity_{args.sparsity_ratio}',
+                    'workloads': f'{base_output}/workloads/sparsity_{args.sparsity_ratio}'
                 }
 
                 result = permute_and_visualize(
@@ -315,10 +316,11 @@ def prune_sparsegpt(args, model, tokenizer, dev, prune_n=0, prune_m=0):
             if i == target_layer and getattr(args, 'save_permuted', False):
                 from .column_permutation import permute_and_visualize
 
+                base_output = getattr(args, 'base_output', './permutation_results')
                 output_dirs = {
-                    'metrics': f'./permutation_results/metrics/sparsity_{args.sparsity_ratio}',
-                    'images': f'./permutation_results/images/sparsity_{args.sparsity_ratio}',
-                    'workloads': f'./permutation_results/workloads/sparsity_{args.sparsity_ratio}'
+                    'metrics': f'{base_output}/metrics/sparsity_{args.sparsity_ratio}',
+                    'images': f'{base_output}/images/sparsity_{args.sparsity_ratio}',
+                    'workloads': f'{base_output}/workloads/sparsity_{args.sparsity_ratio}'
                 }
 
                 result = permute_and_visualize(
