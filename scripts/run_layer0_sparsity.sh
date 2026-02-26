@@ -79,6 +79,7 @@ for SPARSITY in "${SPARSITY_LEVELS[@]}"; do
         --sparsity_type  unstructured \
         --cache_dir      "${CACHE_DIR}" \
         --save           "${BASE_OUTPUT}/logs/sparsity_${SPARSITY}" \
+        --base_output    "${BASE_OUTPUT}" \
         --save_permuted \
         --target_layer   "${TARGET_LAYER}" \
         --group_size     "${GROUP_SIZE}" \
