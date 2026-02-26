@@ -33,7 +33,7 @@ PRUNE_METHOD="wanda"
 TARGET_LAYER=0
 GROUP_SIZE=8
 PERMUTE_AXIS="columns"   # 'columns' (horizontal) or 'rows' (vertical)
-BASE_OUTPUT="./permutation_results"
+BASE_OUTPUT=""           # derived automatically if not set via --base_output
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
 while [[ $# -gt 0 ]]; do
@@ -48,6 +48,13 @@ while [[ $# -gt 0 ]]; do
         *) echo "Unknown argument: $1"; exit 1 ;;
     esac
 done
+
+# ── Derive BASE_OUTPUT from params if not explicitly set ──────────────────────
+if [[ -z "${BASE_OUTPUT}" ]]; then
+    AXIS_SHORT="col"
+    [[ "${PERMUTE_AXIS}" == "rows" ]] && AXIS_SHORT="row"
+    BASE_OUTPUT="./${PRUNE_METHOD}_grp_${GROUP_SIZE}_${AXIS_SHORT}_perm_results"
+fi
 
 export CUDA_VISIBLE_DEVICES=0
 
@@ -72,7 +79,6 @@ for SPARSITY in "${SPARSITY_LEVELS[@]}"; do
         --sparsity_type  unstructured \
         --cache_dir      "${CACHE_DIR}" \
         --save           "${BASE_OUTPUT}/logs/sparsity_${SPARSITY}" \
-        --base_output    "${BASE_OUTPUT}" \
         --save_permuted \
         --target_layer   "${TARGET_LAYER}" \
         --group_size     "${GROUP_SIZE}" \

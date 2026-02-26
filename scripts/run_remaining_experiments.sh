@@ -24,13 +24,15 @@ BASE_SCRIPT="${SCRIPT_DIR}/run_layer0_sparsity.sh"
 
 export CUDA_VISIBLE_DEVICES=0
 
-# Each entry: "prune_method group_size permute_axis output_dir"
+# Each entry: "prune_method group_size permute_axis"
+# BASE_OUTPUT is auto-derived by run_layer0_sparsity.sh:
+#   ./<method>_grp_<size>_<row|col>_perm_results
 EXPERIMENTS=(
-    "wanda    16  rows     wanda_grp_16_row_perm_results"
-    "wanda    16  columns  wanda_grp_16_col_perm_results"
-    "sparsegpt  8  rows    sparsegpt_grp_8_row_perm_results"
-    "sparsegpt 16  rows    sparsegpt_grp_16_row_perm_results"
-    "sparsegpt 16  columns sparsegpt_grp_16_col_perm_results"
+    "wanda    16  rows"
+    "wanda    16  columns"
+    "sparsegpt  8  rows"
+    "sparsegpt 16  rows"
+    "sparsegpt 16  columns"
 )
 
 TOTAL=${#EXPERIMENTS[@]}
@@ -38,7 +40,11 @@ IDX=0
 
 for ENTRY in "${EXPERIMENTS[@]}"; do
     IDX=$((IDX + 1))
-    read -r METHOD GROUP AXIS OUTDIR <<< "${ENTRY}"
+    read -r METHOD GROUP AXIS <<< "${ENTRY}"
+
+    # Mirror the naming logic from run_layer0_sparsity.sh for the log message
+    AXIS_SHORT="col"; [[ "${AXIS}" == "rows" ]] && AXIS_SHORT="row"
+    OUTDIR="${METHOD}_grp_${GROUP}_${AXIS_SHORT}_perm_results"
 
     echo ""
     echo "══════════════════════════════════════════════════════════════"
@@ -49,8 +55,7 @@ for ENTRY in "${EXPERIMENTS[@]}"; do
     bash "${BASE_SCRIPT}" \
         --prune_method  "${METHOD}" \
         --group_size    "${GROUP}" \
-        --permute_axis  "${AXIS}" \
-        --base_output   "./${OUTDIR}"
+        --permute_axis  "${AXIS}"
 
     echo "  [${IDX}/${TOTAL}] Done -> ./${OUTDIR}"
 done
